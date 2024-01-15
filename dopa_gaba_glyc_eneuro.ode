@@ -1,0 +1,192 @@
+#################
+# Katie N. Clements, Sungwoo Ahn, Choongseok Park, Faith K. Heagy, Thomas H. Miller, Miki Kassai, Fadi A. Issa (2023). Socially mediated shift in neural circuits activation  regulated by synergistic neuromodulatory signaling. eNeuro (accepted). 
+
+# ODE code was prepared by Sungwoo Ahn and Choongseok Park.
+
+
+# The following is the list of parameters depending on the animal groups and injections
+
+
+# Control:
+# Dominant: d1ei=0.65 and synpara4=0.2
+# Subordinat: d1ei=0.25 and synpara4=0.4
+
+
+# D1 Antagonist:
+# Dominant: d1em=0, d1ei=0
+# Subordinate: d1em=0, d1ei=0
+
+
+# GABA Antagonist:
+# Dominant: gaba=0, synpara4=0, i2beta=0.024
+# Subordinate: gaba=0, synpara4=0, i2beta=0.0072
+
+
+# Glycine Antagonist:
+# Dominant: glyc=0
+# Subordinate: glyc=0
+
+
+
+######################
+# Mauthner-cell parameters
+
+par vf1=-1.2,vf2=18,vf3=12,vf4=17,gca=4,vca=120,gl=2
+par gk=8,vl=-60,vk=-84,phi=0.23
+par cm=1,kca=1,gkca=0.25,eps=0.005,mu=0.19,ca0=10
+par mbiapp=19.5,it0=20000
+par fre=1,dur=2,thetas=0,ss=4
+
+par mgsyn=0.1,ms2=0.029,mvsyn=-50
+par igsynmax=15,mca0=10,tauagm=10000
+par mgca=4,mgkca=0.3,mkca=0.9
+par d1em=0.015,synpara1=0.24,gaba=0.4,glyc=0.2
+
+
+################
+# initial conditions
+init ev=-30,ew=0.0075,eca=4.6,es=0.03
+init iv=-37.6,iw=0.0029,ica=2.06,is=0.0027
+init mv=-42.1,mw=0.0017,mca=1.44,igsyn=2.61
+init i2v=-37.7,i2w=0.0029,i2ca=2.03,i2s=0.014
+#################
+
+
+# M-cell functions
+minf(v)=0.5*(1+tanh((v-vf1)/vf2))
+winf(v)=0.5*(1+tanh((v-vf3)/vf4))
+tauw(v)=1/cosh((v-vf3)/(2*vf4))
+
+# Synaptic inputs for M-cell
+# e2msyn: synaptic input from excitatory cells
+# synpara1: g_{E->M}
+# d1em: D_{1M}
+# es: s_E
+# evsyn: v_{E->M}
+
+e2msyn = synpara1*(1+d1em)*igsyn*es*(mv-evsyn)
+
+
+# i2msyn: synaptic input from inhibitory cells (GABA, Glycine)
+# igsyn:g_{I}
+# gaba: g_{GA->M}
+# is: s_{GA}
+# glyc: g_{GL->M}
+# i2s: s_{GL}
+# ivsyn: v_{GA->M} = v_{GL->M} 
+
+i2msyn = igsyn*(gaba*is +glyc*i2s)*(mv-ivsyn)
+
+
+# Mauthner-cell equations
+# mbiapp: I_{M0}, a baseline external input to the M-cell
+# mw: n (a gating variable for the potassium current)in the paper 
+# ca0: k_1 in the paper
+# mgsyn*ms2*(mv-mvsyn): inhibitory input from other M-cell
+# mgsyn: g_{M->M}
+# ms2: s_{M}
+# mvsyn: v_{M->M}
+# winf: n_{infty} in the paper
+# tauw(mv): tau_n(v) in the paper 
+# igsyn:g_{I}
+# igsynmax: g_{Imax}
+# mca0: k_2
+# tauagm: \rho
+
+mv' = (mbiapp-e2msyn-i2msyn-mgca*minf(mv)*(mv-vca)-gk*mw*(mv-VK)-gl*(mv-Vl)-mgkca*(mca/(mca+ca0))*(mv-VK)-igsyn*mgsyn*ms2*(mv-mvsyn))/cm
+mw' = phi*(winf(mv)-mw)/tauw(mv)
+mca' = eps*(-mu*gca*minf(mv)*(mv-vca) - mkca*mca)
+igsyn'=(igsynmax/(mca+mca0)-igsyn)/tauagm
+
+
+
+##################
+# Excitatory cell parameters
+par ebiapp=43.9,eiapp=35,evsyn=40,ealpha=15,ebeta=0.1
+par ecm=20,egsyni=0.5,eeps=0.005
+
+# E-cell functions
+
+esinf(v)=1./(1.+exp(-(v+thetas)/ss))
+
+# Excitatory cell equations
+# ebiapp: I_{E0}, a baseline external input to the excitatory cell
+# eiapp: W_{E}, a stimulus strength
+# Unit square pulse = I(t) 
+# dur: pulse duration
+# fre: pulse frequency
+
+ev' = (ebiapp+eiapp*(heav(t-it0)*heav(sin(pi*2*fre/1000*t)-sin(5*pi/2-pi*dur*fre/1000)))-gca*minf(ev)*(ev-vca)-gk*ew*(ev-VK)-gl*(ev-Vl)-gkca*(eca/(eca+ca0))*(ev-VK))/ecm
+ew' = phi*(winf(ev)-ew)/tauw(ev)
+eca' = eps*(-mu*gca*minf(ev)*(ev-vca) - kca*eca)
+es' = ealpha*(1-es)*esinf(ev)-ebeta*es
+
+
+
+###################
+# GABA Inhibitory cell parameters 
+par ibiapp=36,ivsyn=-50,ialpha=4,ibeta=0.08,icm=20,synpara2=0.3
+
+
+isinf(v)=1./(1.+exp(-(v+thetas)/ss))
+
+# Synaptic inputs from E cell: e2isyn
+# synpara2: g_{E->GA}
+# es: s_{E}
+# evsyn: v_{E->GA}
+
+e2isyn = synpara2*es*(iv-evsyn)
+
+# Inhibitory cell equations
+# ibiapp: I_{GA0}, a baseline external input to GABA inhibitory cell
+
+iv' = (ibiapp-e2isyn-gca*minf(iv)*(iv-vca)-gk*iw*(iv-VK)-gl*(iv-Vl)-gkca*(ica/(ica+ca0))*(iv-VK))/icm
+iw' = phi*(winf(iv)-iw)/tauw(iv)
+ica' = eps*(-mu*gca*minf(iv)*(iv-vca) - kca*ica)
+is' = ialpha*(1-is)*isinf(iv)-ibeta*is
+
+
+
+###################
+# Glycine Inhibitory cell parameters 
+par i2biapp=36,i2alpha=8.,i2beta=0.024
+par d1ei=0.65,synpara3=0.3,synpara4=0.2
+
+# Synaptic input from E cell
+# synpara3: g_{E-> GL}
+# d1ei: D_{1GL}  
+# es: s_{E}
+# evsyn: v_{E->GL}
+
+# Glycinergic has D1R so that we need d1 term here.
+e2isyn2 = synpara3*(1+d1ei)*es*(i2v-evsyn)
+
+# Synaptic input from GABA
+# synpara4: g_{GA->GL}
+# is: s_{GA}
+# ivsyn: v_{GA->GL}
+
+# Synaptic input from GABA to Glycine
+i2isyn2 = synpara4*is*(i2v-ivsyn)
+
+
+# i2biapp: I_{GL0}, a baseline external input to Glycine inhibitory cell
+
+i2v' = (i2biapp-e2isyn2-i2isyn2-gca*minf(i2v)*(i2v-vca)-gk*i2w*(i2v-VK)-gl*(i2v-Vl)-gkca*(i2ca/(i2ca+ca0))*(i2v-VK))/icm
+i2w' = phi*(winf(i2v)-i2w)/tauw(i2v)
+i2ca' = eps*(-mu*gca*minf(i2v)*(i2v-vca) - kca*i2ca)
+i2s' = i2alpha*(1-i2s)*isinf(i2v)-i2beta*i2s
+
+
+@ dt=.01,total=70000,njmp=5,trans=0,meth=qualrk,xp=t,yp=mv,xlo=0,xhi=70000,ylo=-50,yhi=40.,bound=500001,maxstor=500001
+
+done
+
+
+
+
+
+
+
+
+
